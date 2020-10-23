@@ -1,4 +1,43 @@
-interface SlackEvent {
+export type MySQLResultRows = Array<any> & { insertId: number};
+export type MySQLColumnCatalogs = Array<any>;
+export type MySQLResultSet = [MySQLResultRows, MySQLColumnCatalogs];
+
+export interface MySQLQueryable {
+  query(sql: string, param?: ReadonlyArray<any>): Promise<MySQLResultSet>;
+}
+
+export interface MySQLClient extends MySQLQueryable {
+  beginTransaction(): Promise<void>;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  release(): Promise<void>;
+}
+
+export interface Member {
+  slackID: string,
+  name: string,
+  kana: string,
+  grade: string
+}
+
+export interface MemberSimple {
+  id: string,
+  name: string
+}
+
+export interface Easteregg {
+  id: string,
+  count: number,
+  mentions: number
+}
+
+export interface VerificationBody {
+  token: string,
+  challenge: string,
+  type: string
+}
+
+export interface SlackEvent {
   type: string,
   event_ts: string,
   user: string,
@@ -6,7 +45,7 @@ interface SlackEvent {
   item?: string | Object
 }
 
-interface SlackMessageEvent extends SlackEvent{
+export interface SlackMessageEvent extends SlackEvent{
   // type: string,
   channel: string,
   // user: string,
@@ -16,14 +55,14 @@ interface SlackMessageEvent extends SlackEvent{
   channel_type: string
 }
 
-interface SlackEventAuthorizations {
+export interface SlackEventAuthorizations {
   enterprise_id: string,
   team_id: string,
   user_id: string,
   is_bot: boolean
 }
 
-interface SlackEventBody {
+export interface SlackEventBody {
   token: string,
   team_id: string,
   api_app_id: string,
@@ -36,5 +75,3 @@ interface SlackEventBody {
   event_id: string,
   event_time: number
 }
-
-export {SlackEventBody, SlackEvent, SlackEventAuthorizations}
