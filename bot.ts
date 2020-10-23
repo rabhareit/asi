@@ -3,8 +3,14 @@ import createFastify, {FastifyRequest, FastifyReply} from "fastify";
 import fastifyMysql from "fastify-mysql";
 import fastifyStatic from "fastify-static";
 
+import axios from "axios";
 import { ServerResponse } from "http";
 import path from "path";
+import log4js from "log4js";
+
+import { SlackEventBody } from "./types";
+import { syncBuiltinESMExports } from "module";
+import { access } from "fs";
 
 type MySQLResultRows = Array<any> & { insertId: number};
 type MySQLColumnCatalogs = Array<any>;
@@ -18,7 +24,7 @@ interface MySQLClient extends MySQLQueryable {
   beginTransaction(): Promise<void>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
-  release(): void;
+  release(): Promise<void>;
 }
 
 declare module "fastify" {
@@ -55,6 +61,27 @@ fastify.register(fastifyMysql, {
   promise: true
 });
 
+log4js.configure({
+  appenders: {
+    system: {type: 'file', filename: 'private/default.log'},
+    db: {type: 'file', filename: 'private/db.transaction.log'},
+    access: {type: 'file', filename: 'private/access.log'},
+    debug: {type: 'file', filename: 'private/debug.log'}
+  },
+  categories: {
+    default: {appenders: ['system'], level: 'info'},
+    db: {appenders: ['db'], level: 'info'},
+    access: {appenders: ['access'], level: 'info'},
+    debug: {appenders: ['debug'], level: 'debug'}
+  }
+})
+const dbLogger = log4js.getLogger('db');
+const accessLogger = log4js.getLogger('access');
+
+function getRandomInt(max: number): number {
+  return Math.floor(Math.random()*Math.floor(max));
+}
+
 interface VerificationBody {
   token: string,
   challenge: string,
@@ -85,7 +112,7 @@ const isVerificationRequest = (request: any): request is VerificationBody => {
 }
 
 interface Member {
-  id: string,
+  slackID: string,
   name: string,
   kana: string,
   grade: string
@@ -100,6 +127,10 @@ interface Easteregg {
   id: string,
   count: number,
   mentions: number
+}
+
+async function getDBConnection(): Promise<MySQLClient> {
+  return fastify.mysql.getConnection();
 }
 
 async function getMemberBySlackID(db: MySQLQueryable, slackId: string): Promise<Member | null> {
@@ -149,25 +180,47 @@ async function updateGomiWorkers(db: MySQLQueryable): Promise<Member[] | null> {
   if (!gomiWorkers) {
     return null;
   }
-
-  await db.query("UPDATE `easteregg` SET `count` = `count`+1 WHERE `slackID` = ? OR ?", [gomiWorkers[0].id, gomiWorkers[1].id]);
-  await db.query("UPDATE `trash` SET `done_in_loop` = TRUE, `on_duty` = FALSE WHERE `on_duty` = TRUE");
+  await db.query("UPDATE `easteregg` SET `count` = `count`+1 WHERE `slackID` = ? OR `slackID` = ?", [gomiWorkers[0].slackID, gomiWorkers[1].slackID]);
+  // TODO Which should it be judged by `slackID` or `on_duty`?
+  await db.query("UPDATE `trash` SET `on_duty` = FALSE WHERE `on_duty` = TRUE");
   const [rows,] = await db.query("SELECT `members`.* FROM `members` JOIN `trash` ON `members`.`slackID` = `trash`.`slackID` WHERE `trash`.`done_in_loop` = FALSE");
 
-  if (rows.length == 0) {
-    return await restartLoop(db);
-  } else if (rows.length == 1) {
-    return await restartLoop(db, rows[0] as Member);
+  // TODO Should consider when update `on_duty` and `done_in_loop` 
+  let guriToGura: Member[] | null = null;
+  if (rows.length === 0) {
+    guriToGura =  await restartLoop(db);
+  } else if (rows.length === 1) {
+    guriToGura = await restartLoop(db, rows[0] as Member);
   } else if (rows.length > 1) {
-    const guri = rows[Math.floor(Math.random()*rows.length)] as Member;
-    let cand = rows.filter( row => row.grade !== guri.grade);
-    if (cand.length < 1) {
-      cand = rows.filter( row => row.id !== guri.id);
-    }
-    const gura = cand[Math.floor(Math.random()*cand.length)];
-    return [guri, gura];
+    guriToGura = chooseTwin(rows);
+    await db.query("UPDATE `trash` SET `on_duty` = TRUE, `done_in_loop` = TRUE WHERE `slackID` = ?", [guriToGura[0].slackID]);
+    await db.query("UPDATE `trash` SET `on_duty` = TRUE, `done_in_loop` = TRUE WHERE `slackID` = ?", [guriToGura[1].slackID]);  
+    dbLogger.info({
+      status: true, 
+      method: 'updateGomiWorkers',
+      sql: 'update',
+      target: [guriToGura[0].slackID, guriToGura[1].slackID],
+      columns: ['trash.on_duty', 'trash.done_in_loop']
+    });
   }
-  return null;
+  
+  if (!guriToGura){
+    dbLogger.error({status: false, msg: 'updateGomiWorkers(), Cannot find next GomiWorker'})
+    return null;
+  }
+
+  return guriToGura;
+}
+
+function chooseTwin(rows: MySQLResultRows): Member[] {
+  const guri = rows[getRandomInt(rows.length)] as Member;
+  let cand = rows.filter( row => row.grade !== guri.grade);
+  if (cand.length < 1) {
+    cand = rows.filter( row => row.slackID !== guri.slackID);
+  }
+  const gura = cand[getRandomInt(cand.length)] as Member;
+  console.log(rows, cand);
+  return [guri, gura];
 }
 
 async function restartLoop(db: MySQLQueryable, partner?: Member): Promise<Member[] | null> {
@@ -186,9 +239,41 @@ async function restartLoop(db: MySQLQueryable, partner?: Member): Promise<Member
    */
   await db.query("UPDATE `trash` SET `on_duty` = false, `done_in_loop` = false");
   const [rows,] = await db.query("SELECT * FROM `members`");
-  const guri = partner ? partner : rows[Math.floor(Math.random()*rows.length)] as Member;
-  const cand = rows.filter( row => row.grade !== guri.grade);
-  const gura = cand[Math.floor(Math.random()*rows.length)] as Member;
+  
+  // TODO SHOULD implove this code block
+  let guri: Member, gura: Member;
+  if (partner) {
+    guri = partner;
+    const cand = rows.filter( row => row.grade !== guri.grade);
+    gura = cand[getRandomInt(cand.length)] as Member;
+    await db.query("UPDATE `trash` SET `on_duty` = TRUE WHERE `slackID` = ?", [guri.slackID])
+    await db.query("UPDATE `trash` SET `on_duty` = TRUE, `done_in_loop` = TRUE WHERE `slackID` = ?", [gura.slackID]);
+    dbLogger.info({
+      status: true, 
+      method: 'restartLoop1',
+      sql: 'update',
+      target: [guri.slackID],
+      columns: ['trash.on_duty']
+    },{
+      status: true, 
+      method: 'restartLoop2',
+      sql: 'update',
+      target: [gura.slackID],
+      columns: ['trash.on_duty', 'trash.done_in_loop']
+    });
+  } else {
+    guri = rows[getRandomInt(rows.length)] as Member
+    const cand = rows.filter( row => row.grade !== guri.grade);
+    gura = cand[getRandomInt(cand.length)] as Member;
+    await db.query("UPDATE `trash` SET `on_duty` = TRUE, `done_in_loop` = TRUE WHERE `slackID` = ? or `slackID` = ?", [guri.slackID, gura.slackID]);
+    dbLogger.info({
+      status: true,
+      method: 'restartLoop3',
+      sql: 'update',
+      target: [guri.slackID, gura.slackID],
+      columns: ['trash.on_duty', 'trash.done_in_loop']
+    });
+  }
   return [guri, gura];
 }
 
@@ -244,11 +329,15 @@ async function getMentionCount(db: MySQLQueryable, slackID: string): Promise<num
 // Routings
 fastify.post('/verification', verification);
 fastify.post('/initialize', postInitialize);
-fastify.post('/gomi', replyGomi);
+fastify.post('/gomi', sendGomiWorker);
 fastify.post('/update', updateGomi);
 fastify.post('/restart', restartGomi);
 
 fastify.get('/', accessHome);
+// For browser debug
+fastify.get('/gomi', sendGomiWorker);
+fastify.get('/update', updateGomi);
+fastify.get('/restart', restartGomi);
 
 // Routing functions
 async function verification(req: FastifyRequest, reply: FastifyReply) {
@@ -274,16 +363,116 @@ async function postInitialize() {
   
 }
 
-async function replyGomi() {
-  
+async function sendGomiWorker(req: FastifyRequest, reply: FastifyReply) {
+  const db = await getDBConnection();
+  const workers = await getGomiWorkers(db);
+
+  let message, channel;
+  if (workers){
+    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
+    channel = 'random';
+  } else {
+    message = ':damesou:';
+    channel = 'ULMK1UHJS';
+  }
+
+  const slackReq = {
+    token: 'BOT_OAUTH_TOKEN',
+    channel: channel,
+    text: message,
+    as_user: false
+  }
+
+  // const eventBody = req.body as SlackEventBody;
+  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
+  // const loggingObj = {
+  //   status: slackRes.status,
+  //   request: eventBody,
+  //   apiResponse: slackRes.data
+  // }
+  let sender = 'ULMK1UHJS';
+  await countMetion(db, sender);
+  await db.release();
+
+  reply
+    .code(200)
+    .type('application/json')
+    .send(slackReq);
 }
 
-async function updateGomi() {
-  
+async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
+  const db = await getDBConnection();
+  const workers = await updateGomiWorkers(db);  
+
+  let message, channel;
+  if (workers){
+    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
+    channel = 'random';
+  } else {
+    message = ':damesou:';
+    channel = 'ULMK1UHJS';
+  }
+
+  const slackReq = {
+    token: 'BOT_OAUTH_TOKEN',
+    channel: channel,
+    text: message,
+    as_user: false
+  }
+
+  // const eventBody = req.body as SlackEventBody;
+  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
+  // const loggingObj = {
+  //   status: slackRes.status,
+  //   request: eventBody,
+  //   apiResponse: slackRes.data
+  // }
+  let sender = 'ULMK1UHJS';
+  await countMetion(db, sender);
+  await db.release();
+
+  reply
+    .code(200)
+    .type('application/json')
+    .send(slackReq);
+
 }
 
-async function restartGomi() {
+async function restartGomi(req: FastifyRequest, reply: FastifyReply) {
+  const db = await getDBConnection();
+  const workers = await restartLoop(db);
   
+  let message, channel;
+  if (workers){
+    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
+    channel = 'random';
+  } else {
+    message = ':damesou:';
+    channel = 'ULMK1UHJS';
+  }
+
+  const slackReq = {
+    token: 'BOT_OAUTH_TOKEN',
+    channel: channel,
+    text: message,
+    as_user: false
+  }
+
+  // const eventBody = req.body as SlackEventBody;
+  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
+  // const loggingObj = {
+  //   status: slackRes.status,
+  //   request: eventBody,
+  //   apiResponse: slackRes.data
+  // }
+  let sender = 'ULMK1UHJS';
+  await countMetion(db, sender);
+  await db.release();
+
+  reply
+    .code(200)
+    .type('application/json')
+    .send(slackReq);
 }
 
 async function accessHome(req: FastifyRequest, reply: FastifyReply) {
