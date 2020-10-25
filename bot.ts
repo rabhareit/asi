@@ -3,8 +3,6 @@ import createFastify, {FastifyRequest, FastifyReply} from "fastify";
 import fastifyMysql from "fastify-mysql";
 import fastifyStatic from "fastify-static";
 
-import axios from "axios";
-
 import {
   countMetion,
   getGomiWorkers,
