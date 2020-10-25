@@ -1,4 +1,6 @@
+import childProcess from "child_process";
 import log4js from "log4js";
+import util from "util";
 
 export function getRandomInt(max: number): number {
   return Math.floor(Math.random()*Math.floor(max));
@@ -21,3 +23,5 @@ log4js.configure({
 
 export const dbLogger = log4js.getLogger('db');
 export const accessLogger = log4js.getLogger('access');
+
+export const execFile = util.promisify(childProcess.execFile);
