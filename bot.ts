@@ -18,6 +18,8 @@ import {
   VerificationBody
 } from "./types";
 
+import { execFile } from "./util";
+
 declare module "fastify" {
   interface FastifyInstance {
     mysql: MySQLQueryable & {
@@ -88,9 +90,9 @@ fastify.post('/restart', restartGomi);
 
 fastify.get('/', accessHome);
 // For browser debug
-fastify.get('/gomi', sendGomiWorker);
-fastify.get('/update', updateGomi);
-fastify.get('/restart', restartGomi);
+fastify.get('/get/gomi', sendGomiWorker);
+fastify.get('/get/update', updateGomi);
+fastify.get('/get/restart', restartGomi);
 
 // Routing functions
 async function verification(req: FastifyRequest, reply: FastifyReply) {
@@ -112,8 +114,19 @@ async function verification(req: FastifyRequest, reply: FastifyReply) {
     .send({msg: 'Cannot handle reqested data.', requested: req.body});
 }
 
-async function postInitialize() {
-  
+async function postInitialize(req: FastifyRequest, reply: FastifyReply) {
+  await execFile('./db/init.sh');
+
+  const res = {
+    status: 'OK'
+  };
+
+  // May not be needed.
+  reply
+    .code(200)
+    .type('application/json')
+    .send(res);
+
 }
 
 async function sendGomiWorker(req: FastifyRequest, reply: FastifyReply) {
