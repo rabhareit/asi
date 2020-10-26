@@ -8,15 +8,19 @@ import {
   getGomiWorkers,
   restartLoop,
   updateGomiWorkers,
-} from "./SQLRepository";
+} from "./SQLPlugin";
+
+import { postSlackMessage } from "./slackAPIs";
 
 import {
   MySQLClient,
   MySQLQueryable,
-  VerificationBody
+  VerificationBody,
+  SlackEventBody,
+  SlackAPIResponseSimple
 } from "./types";
 
-import { execFile } from "./util";
+import { execFile, generateMessage } from "./util";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -82,13 +86,13 @@ async function getDBConnection(): Promise<MySQLClient> {
 // Routings
 fastify.post('/verification', verification);
 fastify.post('/initialize', postInitialize);
-fastify.post('/gomi', sendGomiWorker);
+fastify.post('/gomi', postGomiWorker);
 fastify.post('/update', updateGomi);
 fastify.post('/restart', restartGomi);
 
 fastify.get('/', accessHome);
 // For browser debug
-fastify.get('/get/gomi', sendGomiWorker);
+fastify.get('/get/gomi', postGomiWorker);
 fastify.get('/get/update', updateGomi);
 fastify.get('/get/restart', restartGomi);
 
@@ -127,41 +131,38 @@ async function postInitialize(req: FastifyRequest, reply: FastifyReply) {
 
 }
 
-async function sendGomiWorker(req: FastifyRequest, reply: FastifyReply) {
+async function postGomiWorker(req: FastifyRequest, reply: FastifyReply) {
   const db = await getDBConnection();
   const workers = await getGomiWorkers(db);
 
   let message, channel;
   if (workers){
-    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
-    channel = 'random';
+    message = generateMessage(workers); 
+    channel = 'shiftbot';
   } else {
     message = ':damesou:';
-    channel = 'ULMK1UHJS';
+    channel = 'UU063TWGY';
   }
 
-  const slackReq = {
-    token: 'BOT_OAUTH_TOKEN',
-    channel: channel,
-    text: message,
-    as_user: false
-  }
+  const apiRes: SlackAPIResponseSimple = await postSlackMessage(message, channel);
 
+  // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
-  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
   // const loggingObj = {
-  //   status: slackRes.status,
+  //   status: apiRes.status,
   //   request: eventBody,
-  //   apiResponse: slackRes.data
+  //   msg: apiRes.status ? apiRes.ts : apiRes.error
   // }
-  let sender = 'ULMK1UHJS';
-  await countMetion(db, sender);
+
+  // const senderId = eventBody.event.user;
+  // let sender = 'ULMK1UHJS';
+  // await countMetion(db, sender);
   await db.release();
 
   reply
     .code(200)
     .type('application/json')
-    .send(slackReq);
+    .send({msg: message});
 }
 
 async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
@@ -170,35 +171,32 @@ async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
 
   let message, channel;
   if (workers){
-    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
+    message = generateMessage(workers); 
     channel = 'random';
   } else {
     message = ':damesou:';
     channel = 'ULMK1UHJS';
   }
 
-  const slackReq = {
-    token: 'BOT_OAUTH_TOKEN',
-    channel: channel,
-    text: message,
-    as_user: false
-  }
+  const apiRes = await postSlackMessage(message, channel);
 
+  // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
-  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
   // const loggingObj = {
-  //   status: slackRes.status,
+  //   status: apiRes.status,
   //   request: eventBody,
-  //   apiResponse: slackRes.data
+  //   msg: apiRes.status ? apiRes.ts : apiRes.error
   // }
-  let sender = 'ULMK1UHJS';
-  await countMetion(db, sender);
+
+  // const senderId = eventBody.event.user;
+  // let sender = 'ULMK1UHJS';
+  // await countMetion(db, sender);
   await db.release();
 
   reply
     .code(200)
     .type('application/json')
-    .send(slackReq);
+    .send({msg: message});
 
 }
 
@@ -208,35 +206,33 @@ async function restartGomi(req: FastifyRequest, reply: FastifyReply) {
   
   let message, channel;
   if (workers){
-    message = `次回のごみ捨て当番は${workers[0].name}さん、${workers[1].name}さんです。`
+    message = generateMessage(workers); 
     channel = 'random';
   } else {
     message = ':damesou:';
     channel = 'ULMK1UHJS';
   }
 
-  const slackReq = {
-    token: 'BOT_OAUTH_TOKEN',
-    channel: channel,
-    text: message,
-    as_user: false
-  }
+  const apiRes = await postSlackMessage(message, channel);
 
+  // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
-  // const slackRes = await axios.post('POST_MESSAEG_DEST', slackReq);
   // const loggingObj = {
-  //   status: slackRes.status,
+  //   status: apiRes.status,
   //   request: eventBody,
-  //   apiResponse: slackRes.data
+  //   msg: apiRes.status ? apiRes.ts : apiRes.error
   // }
-  let sender = 'ULMK1UHJS';
-  await countMetion(db, sender);
+
+  // const senderId = eventBody.event.user;
+  // let sender = 'ULMK1UHJS';
+  // await countMetion(db, sender);
   await db.release();
 
   reply
     .code(200)
     .type('application/json')
-    .send(slackReq);
+    .send({msg: message});
+
 }
 
 async function accessHome(req: FastifyRequest, reply: FastifyReply) {
