@@ -106,17 +106,26 @@ export interface SlackEventBody extends BasicEventBody {
  * https://api.slack.com/methods/chat.postMessage
  */
 export interface PostMessageRequest extends BasicEventBody {
+  // Bot user oauth token
   token: string,
+  // Channel ID or name
   channel: string,
+  // Message you would like to send(This value should be a single String value)
   text: string,
-  as_user?: boolean,
-  attachments?: PostMessageAttachment[],    // Make interface detail If you need
-  blocks?: Object[]                         // Make interface detail If you need
-  icon_emoji?: string,                      // This value will be ignored in newer token
+  // Deprecated argument
+  as_user?: boolean,                     
+  // Make interface detail If you need
+  attachments?: PostMessageAttachment[],
+  // Make interface detail If you need
+  blocks?: Object[],
+  // This value will be ignored in newer token
+  icon_emoji?: string,
   icon_url?: string,
   link_names?: boolean,
+  // Which you send message as markdown or not(`true` means markdown)
   mrkdwn?: boolean,
   parse?: string,
+  // Which this reply visible to everyone or not
   reply_broadcast?: boolean,
   thread_ts?: string,
   unfurl_links?: boolean,
@@ -135,28 +144,47 @@ export interface PostMessageAttachment extends BasicEventBody {
 /**
  * Response body structure of `chat.postMessage` slack API method
  */
-export interface SlackAPIResponce extends BasicEventBody {
+export interface SlackAPIResponse extends BasicEventBody {
   ok: boolean,
   error?: string
   channel?: string,
   ts?: string,
-  message?: {
-    text: string,
-    username: string,
-    bot_id: string,
-    attachments: [
-      {
-        text: string,
-        id: number,
-        fallback: string
-      }
-    ],
-    type?: string,
-    subtype?: string,
-    ts?: string
-  }
+  message?: SlackMessage,
+  warning?: string
 }
 
+/**
+ * Detail structure of `SlackMessage` in above interface
+ */
+interface SlackMessage extends BasicEventBody {
+  text?: string,
+  user?: string,
+  bot_id?: string,
+  attachments?: [
+    {
+      text?: string,
+      id?: string,
+      fallback?: string
+      [key: string]: any
+    }
+  ],
+  type?: string,
+  subtype?: string,
+  ts?: string
+}
+/**
+ * Simple version of `SlackAPIResponse` interface
+ */
+export interface SlackAPIResponseSimple {
+  status: boolean,
+  ts?: string,
+  error?: string,
+  warning?: string
+}
+
+/**
+ * TODO: Consider well this is really necessary or not
+ */
 interface BasicEventBody {
   [key: string]: any
 }
