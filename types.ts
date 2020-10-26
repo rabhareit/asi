@@ -135,7 +135,7 @@ export interface PostMessageAttachment extends BasicEventBody {
 /**
  * Response body structure of `chat.postMessage` slack API method
  */
-export interface SlackAPIResponce extends BasicEventBody {
+export interface SlackAPIResponse extends BasicEventBody {
   ok: boolean,
   error?: string
   channel?: string,
@@ -157,6 +157,18 @@ export interface SlackAPIResponce extends BasicEventBody {
   }
 }
 
+/**
+ * Simple version of `SlackAPIResponse` interface
+ */
+export interface SlackAPIResponseSimple {
+  status: boolean,
+  ts?: string,
+  error?: string
+}
+
+/**
+ * TODO: Consider well this is really necessary or not
+ */
 interface BasicEventBody {
   [key: string]: any
 }
