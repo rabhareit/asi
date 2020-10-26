@@ -1,23 +1,24 @@
-import axios from "axios";
+import axios, { AxiosResponse } from "axios";
 
 import { PostMessageRequest, SlackAPIResponse, SlackAPIResponseSimple} from "./types";
 
-const ACCESS_TOKEN = '';
+const ACCESS_TOKEN = process.env.BOT_OAUTH_TOKEN || '';
 const POST_MESSAGE = 'https://slack.com/api/chat.postMessage';
 
 export async function postSlackMessage(message: string, dest: string): Promise<SlackAPIResponseSimple> {
   const header = {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=UTF-8',
     'Authorization': `Bearer ${ACCESS_TOKEN}`
   }
+
   const req: PostMessageRequest = {
     token: ACCESS_TOKEN,
     channel: dest,
-    text: message,
-    as_user: false
+    text: message
   }
 
-  const res: SlackAPIResponse = await axios.post(POST_MESSAGE, req, {headers: header});
+  const response: AxiosResponse = await axios.post(POST_MESSAGE, req, {headers: header});
+  const res: SlackAPIResponse = response.data;
   if (res.ok) {
     return {status: res.ok, ts: res.ts}
   } else {
