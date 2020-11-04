@@ -84,7 +84,7 @@ export interface SlackEventAuthorizations extends BasicEventBody {
 }
 
 /**
- * TODO: What's this???
+ * Structure send from Event Subscription.
  */
 export interface SlackEventBody extends BasicEventBody {
   token: string,

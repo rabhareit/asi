@@ -17,6 +17,7 @@ import {
   MySQLQueryable,
   VerificationBody,
   SlackEventBody,
+  SlackMessageEvent,
   SlackAPIResponseSimple
 } from "./types";
 
@@ -56,16 +57,15 @@ fastify.register(fastifyMysql, {
   promise: true
 });
 
+/**
+ * Check given object is assignable to `VerificationBody` or not.
+ * 
+ * @param request : Any object
+ * @returns boolean : 
+ * If given object is assignable to `VerificationBody`, return `true`, 
+ * otherwise `false`.
+ */
 const isVerificationRequest = (request: any): request is VerificationBody => {
-  /**
-   * Check given object is assignable to `VerificationBody` or not.
-   * 
-   * Arg:
-   *  request(any)  : Any object.
-   * 
-   * Return:
-   *  If given object is assignable to `VerificationBody`, return `true`, otherwise `false`.
-   */
   if (!request) return false;
   if (typeof request === 'object') {
     if (
@@ -83,21 +83,60 @@ async function getDBConnection(): Promise<MySQLClient> {
   return fastify.mysql.getConnection();
 }
 
-// Routings
+/**
+ * Rountings
+ */
+
+// Main functions
 fastify.post('/verification', verification);
+fastify.post('/event', eventHandler);
+
+//For adomin controll and debug
 fastify.post('/initialize', postInitialize);
 fastify.post('/gomi', postGomiWorker);
 fastify.post('/update', updateGomi);
 fastify.post('/restart', restartGomi);
 
+// For README
 fastify.get('/', accessHome);
-// For browser debug
+
+// For browser debug(DELETE THESE)
 fastify.get('/get/gomi', postGomiWorker);
 fastify.get('/get/update', updateGomi);
 fastify.get('/get/restart', restartGomi);
 
-// Routing functions
-async function verification(req: FastifyRequest, reply: FastifyReply) {
+/**
+ * Event handling function.
+ * 
+ * @param req 
+ * @param reply 
+ */
+async function eventHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (isVerificationRequest(req.body)) {
+    return verification(req, reply);
+  }
+  
+  const eventBody = req.body as SlackEventBody
+  // TODO: DANGER!!!
+  const msgEvent = eventBody.event as SlackMessageEvent
+
+  // TODO: Check regex
+  if (msgEvent.text.match(/ごみ/)){
+    return await postGomiWorker(req, reply);
+  } else {
+    return await chatting(req, reply);
+  }
+}
+
+/**
+ * Verification method.
+ * When register URL as a Event subscription destination,
+ * Slack send `challenge` parameter in request object.
+ * This method immidiately return `challenge` parameter and its value as respond.
+ * @param req 
+ * @param reply 
+ */
+function verification(req: FastifyRequest, reply: FastifyReply) {
   if (isVerificationRequest(req.body)) {
     const rb: VerificationBody = req.body;
 
@@ -116,9 +155,16 @@ async function verification(req: FastifyRequest, reply: FastifyReply) {
     .send({msg: 'Cannot handle reqested data.', requested: req.body});
 }
 
+/**
+ * Initialize database.
+ *  
+ * @param req 
+ * @param reply 
+ */
 async function postInitialize(req: FastifyRequest, reply: FastifyReply) {
   await execFile('./db/init.sh');
 
+  //TODO: Error handling
   const res = {
     status: 'OK'
   };
@@ -131,6 +177,13 @@ async function postInitialize(req: FastifyRequest, reply: FastifyReply) {
 
 }
 
+/**
+ * Send Slack message about next cleaning role.
+ * Do not call this directoly. Please wrap it with main event handler.
+ * 
+ * @param req 
+ * @param reply 
+ */
 async function postGomiWorker(req: FastifyRequest, reply: FastifyReply) {
   const db = await getDBConnection();
   const workers = await getGomiWorkers(db);
@@ -144,7 +197,7 @@ async function postGomiWorker(req: FastifyRequest, reply: FastifyReply) {
     channel = 'UU063TWGY';
   }
 
-  const apiRes: SlackAPIResponseSimple = await postSlackMessage(message, channel);
+  // const apiRes: SlackAPIResponseSimple = await postSlackMessage(message, channel);
 
   // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
@@ -159,12 +212,17 @@ async function postGomiWorker(req: FastifyRequest, reply: FastifyReply) {
   // await countMetion(db, sender);
   await db.release();
 
-  reply
-    .code(200)
-    .type('application/json')
-    .send({msg: message});
+  console.log(message)
+  reply.code(200);
 }
 
+/**
+ * Update next cleaning role and send it to Slack.
+ * Do not call this directoly. Please wrap this with main event handler.
+ * 
+ * @param req 
+ * @param reply 
+ */
 async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
   const db = await getDBConnection();
   const workers = await updateGomiWorkers(db);  
@@ -200,6 +258,13 @@ async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
 
 }
 
+/**
+ * Reset status and restart cycle, 
+ * then assign next cleaning role and send it to Slack.
+ * Do not call this directly. Please wrap it with main event handler. 
+ * @param req 
+ * @param reply 
+ */
 async function restartGomi(req: FastifyRequest, reply: FastifyReply) {
   const db = await getDBConnection();
   const workers = await restartLoop(db);
@@ -233,6 +298,16 @@ async function restartGomi(req: FastifyRequest, reply: FastifyReply) {
     .type('application/json')
     .send({msg: message});
 
+}
+
+/**
+ * Send response to reqested text.
+ * 
+ * @param req 
+ * @param reply 
+ */
+async function chatting(req: FastifyRequest, reply: FastifyReply) {
+  // TODO
 }
 
 async function accessHome(req: FastifyRequest, reply: FastifyReply) {
