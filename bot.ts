@@ -144,7 +144,7 @@ async function postGomiWorker(req: FastifyRequest, reply: FastifyReply) {
     channel = 'UU063TWGY';
   }
 
-  const apiRes: SlackAPIResponseSimple = await postSlackMessage(message, channel);
+  // const apiRes: SlackAPIResponseSimple = await postSlackMessage(message, channel);
 
   // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
@@ -178,7 +178,7 @@ async function updateGomi(req: FastifyRequest, reply: FastifyReply) {
     channel = 'ULMK1UHJS';
   }
 
-  const apiRes = await postSlackMessage(message, channel);
+  // const apiRes = await postSlackMessage(message, channel);
 
   // // If you would like to log interactions, use following as a sample.
   // const eventBody = req.body as SlackEventBody;
