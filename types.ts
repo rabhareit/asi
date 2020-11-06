@@ -188,3 +188,49 @@ export interface SlackAPIResponseSimple {
 interface BasicEventBody {
   [key: string]: any
 }
+
+/**
+ * Structure of request for `Chaplus API`
+ */
+export interface ChaplusRequest {
+  utterance: string,
+  username?: string,
+  agentState?: {
+    agentName?: string,
+    tone?: 'normal' | 'kansai' | 'koshu' |'dechu',
+    age?: string
+  },
+  additional?: {
+    options?: [],
+    utterancePairs?: [
+      {
+        utterance: string,
+        responce: string
+      }
+    ],
+    ngwords?: string[],
+    unknownResponses?: string[]
+  }
+}
+
+/**
+ * Structure of response from `Chaplus API`
+ */
+export interface ChaplusResponse {
+  bestResponse: {
+    utterance: string,
+    score: number,
+    url: string[],
+    options: string[] | null
+  },
+  responses: [
+    {
+      utterance: string,
+      score: number,
+      url: string[],
+      options: string[] | null
+    }
+  ],
+  tokanized: string[],
+  options: string[]
+}
