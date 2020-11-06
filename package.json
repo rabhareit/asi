@@ -5,6 +5,7 @@
   "main": "bot.ts",
   "scripts": {
     "start": "ts-node --files bot.ts",
+    "bolt": "ts-node --files app.ts",
     "dev": "ts-node-dev --files bot.ts",
     "test": "tsc --noEmit"
   },
