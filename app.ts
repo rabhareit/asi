@@ -1,28 +1,16 @@
 import { App, LogLevel } from "@slack/bolt"
 import { getGomiWorkers } from "./SQLRepository";
-import { generateMessage } from "./util";
+import { BoltCustomLogger, generateMessage, isGomiWorker } from "./util";
 
-import { createWriteStream } from "fs";
 import { chatting } from "./api";
-import { send } from "process";
 
-const logWritable = createWriteStream('private/bolt.log')
 const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
 const botOAuthToken = process.env.SLACK_BOT_OAUTH_TOKEN || '';
 
 const asi = new App({
   signingSecret: signingSecret,
   token: botOAuthToken,
-  // logLevel: LogLevel.ERROR,
-  logger: {
-    debug: (...msgs) => {logWritable.write(`[debug] : ${JSON.stringify(msgs)}\n`)},
-    info: (...msgs) => {logWritable.write(`[info] : ${JSON.stringify(msgs)}\n`)},
-    warn: (...msgs) => {logWritable.write(`[warn] : ${JSON.stringify(msgs)}\n`)},
-    error: (...msgs) => {logWritable.write(`[error] : ${JSON.stringify(msgs)}\n`)},
-    getLevel: () => {return LogLevel.ERROR},
-    setLevel: (label: LogLevel) => {},
-    setName: (name: string) => {}
-  }
+  logLevel: LogLevel.ERROR,
 });
 
 asi.message(async ({message, say}) => {
@@ -35,9 +23,10 @@ asi.message(async ({message, say}) => {
   }
 
   // message contain `ごみ` it asks next cleaning role
-  if(msg?.match('ごみ')){
+  if(msg.match('ごみ')){
     // message contain `ごみ` & `終` it tells finishing cleaning role
-    if (msg?.match('終')) {
+    const gomiWorkers = await getGomiWorkers();
+    if (msg.match('終') && isGomiWorker(sender, gomiWorkers)) {
       await asi.client.reactions.add({
         token: botOAuthToken,
         channel: message.channel,
@@ -47,7 +36,6 @@ asi.message(async ({message, say}) => {
       await say(`<@${sender}>さんありがとうございます！`);
       return
     }
-    const gomiWorkers = await getGomiWorkers();
     const reply = generateMessage(gomiWorkers);
     await say(reply);
   }
