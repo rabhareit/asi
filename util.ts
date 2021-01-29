@@ -2,6 +2,7 @@ import { LogLevel } from "@slack/bolt";
 import childProcess from "child_process";
 import { createWriteStream, WriteStream } from "fs";
 import log4js from "log4js";
+import { send } from "process";
 import util from "util";
 import { Member } from "./types";
 
@@ -66,6 +67,10 @@ export const accessLogger = log4js.getLogger('access');
 
 export const execFile = util.promisify(childProcess.execFile);
 
+export function isGomiWorker(sender: string, workers: Member[]) {
+  return workers[0].slackID === sender || workers[1].slackID === sender;
+}
+
 export function generateMessage(workers: Member[]): string {
-  return `次回のごみ捨て当番は${workers[0].name}(<@${workers[0].slackID}>)さん、${workers[1].name}(<@${workers[1].slackID}>)さんです。`
+  return `次回のごみ捨て当番は${workers[0].name}さん(<@${workers[0].slackID}>)、${workers[1].name}さん(<@${workers[1].slackID}>)です。`
 }
