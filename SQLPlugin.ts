@@ -6,6 +6,18 @@ import {
 } from "./types";
 import { getRandomInt, dbLogger } from "./util";
 
+/**
+ * This module is for bot with fastify
+ */
+
+
+/**
+ * Choose two menbers randomly as a next cleaning role.
+ * Selected member should be different grade.
+ * 
+ * @param rows (MySQLResultRows) : Result rows implicitly Listed Member object
+ * @returns [guri, gura] (Array<Member>) : Next cleaning role.
+ */
 function chooseTwin(rows: MySQLResultRows): Member[] {
   const guri = rows[getRandomInt(rows.length)] as Member;
   let cand = rows.filter( row => row.grade !== guri.grade);
@@ -13,21 +25,18 @@ function chooseTwin(rows: MySQLResultRows): Member[] {
     cand = rows.filter( row => row.slackID !== guri.slackID);
   }
   const gura = cand[getRandomInt(cand.length)] as Member;
-  console.log(rows, cand);
   return [guri, gura];
 }
 
+/**
+ * Return Member object who has given slackID
+ * 
+ * @param db (MySQLQueryable) : Database connection object
+ * @param slackId (string) : slackID that identify member
+ * 
+ * @returns row (Member|null) : `Member` object or null in `Promise
+ */
 export async function getMemberBySlackID(db: MySQLQueryable, slackId: string): Promise<Member | null> {
-  /**
-   * Return `Member` object who has given slackID
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   *  slackID(string)     : Unique slackID
-   * 
-   * Return:
-   *  `Member` object or null in `Promise`
-   */
   const [rows,] = await db.query("SELECT * FROM `members` WHERE slackID = ?", [slackId]);
   for (const row of rows) {
     return row as Member;
@@ -35,31 +44,26 @@ export async function getMemberBySlackID(db: MySQLQueryable, slackId: string): P
   return null;
 }
 
+/**
+ * Return `Member` object on duty of cleaning.
+ * 
+ * @param db (MySQLQueryable)  : Database connection object
+ * 
+ * @returns gomiWorkers (Array<Member>| null) : Listed `Member` object or null in `Promise` 
+ */
 export async function getGomiWorkers(db: MySQLQueryable): Promise<Member[] | null> {
-  /**
-   * Return `Member` object on duty of cleaning.
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   * 
-   * Return:
-   *  Listed `Member` object or null in `Promise`
-   */
   const [rows,] = await db.query("SELECT `members`.* FROM `members` JOIN `trash` ON `members`.`slackID` = `trash`.`slackID` WHERE `on_duty` = true");
   const gomiWorkers: Member[] = rows.map( row => row as Member);
   return gomiWorkers;
 }
 
+/**
+ * Update next cleaning role and return `Member` object of next role.
+ * 
+ * @param db (MySQLQueryable)  : Database connection object
+ * @returns guriToGura (Array<Member>|null) : Listed `Member` object or null in `Promise`
+ */
 export async function updateGomiWorkers(db: MySQLQueryable): Promise<Member[] | null> {
-  /**
-   * Update next cleaning role and return `Member` object of next role.
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   * 
-   * Return:
-   *  Listed `Member` object or null in `Promise`
-   */
   const gomiWorkers = await getGomiWorkers(db);
   if (!gomiWorkers) {
     return null;
@@ -96,20 +100,17 @@ export async function updateGomiWorkers(db: MySQLQueryable): Promise<Member[] | 
   return guriToGura;
 }
 
+/**
+ * Update next cleaning role and return `Member` object of next role.
+ * When all members assigned, reset status and assign again.
+ *
+ * @param db (MySQLQueryable)  : Database connection object
+ * @param partner (Member)     : If there is one member who is not assigned in loop,
+ *                               this value is passed, and is considered as one of 
+ *                               next cleaning role.
+ * @returns [guri, gura] (Array<Member>|null) : Listed `Member` object or null in `Promise`
+ */
 export async function restartLoop(db: MySQLQueryable, partner?: Member): Promise<Member[] | null> {
-  /**
-   * Update next cleaning role and return `Member` object of next role.
-   * When all members assigned, reset status and assign again.
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   *  partner(Member)     : If there is one member who is not assigned in loop,
-   *                        this value is passed, and is considered as one of 
-   *                        next cleaning role.
-   * 
-   * Return:
-   *  Listed `Member` object or null in `Promise`
-   */
   await db.query("UPDATE `trash` SET `on_duty` = false, `done_in_loop` = false");
   const [rows,] = await db.query("SELECT * FROM `members`");
   
@@ -150,28 +151,25 @@ export async function restartLoop(db: MySQLQueryable, partner?: Member): Promise
   return [guri, gura];
 }
 
+/**
+ * Update number of given member did cleaning role.
+ * 
+ * @param db (MySQLQueryable)  : Database connection object
+ * @param slackID (string)     : Unique SlackID that identify member
+ */
 export async function countMetion(db: MySQLQueryable, slackID: string): Promise<void> {
-  /**
-   * Update number of given member did cleaning role.
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   *  slackID(string)     : Unique SlackID
-   */
   await db.query("UPDATE `easteregg` SET `mentions` = `mentions` + 1 WHERE `slackID` = ?", [slackID]);
 }
 
+/**
+ * Return number of given member did cleaning role. 
+ * 
+ * @param db (MySQLQueryable)  : Database connection object
+ * @param slackID (string)     : Unique slackID that identify member
+ * 
+ * @returns ee.count (number|null) Number of they did cleaning role or `null` in `Promise`
+ */
 export async function getGomiCount(db: MySQLQueryable, slackID: string): Promise<number | null> {
-  /**
-   * Return number of given member did cleaning role. 
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   *  slackID(string)     : Unique slackID
-   * 
-   * Return:
-   *  Number of they did cleaning role or `null` in `Promise`
-   */
   const [rows,] = await db.query("SELECT * FROM `easteregg` WHERE `slackID` = ?", [slackID]);
   for (const row of rows) {
     const ee = row as Easteregg;
@@ -180,17 +178,15 @@ export async function getGomiCount(db: MySQLQueryable, slackID: string): Promise
   return null;
 }
 
+/**
+ * Return number of given member mentioned to this bot. 
+ * 
+ * @param db (MySQLQueryable)  : Database connectin object
+ * @param slackID (string)     : Unique slackID that identify member
+ * 
+ * @returns ee.mentions (number|null) : Number of they mentioned or `null` in `Promise`
+ */
 export async function getMentionCount(db: MySQLQueryable, slackID: string): Promise<number | null> {
-  /**
-   * Return number of given member mentioned to this bot. 
-   * 
-   * Args:
-   *  db(MySQLQueryable)  : Database object
-   *  slackID(string)     : Unique slackID
-   * 
-   * Return:
-   *  Number of they mentioned or `null` in `Promise`
-   */
   const [rows,] = await db.query("SELECT * FROM `easteregg` WHERE `slackID` = ?", [slackID]);
   for (const row of rows) {
     const ee = row as Easteregg;
