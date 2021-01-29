@@ -2,6 +2,13 @@ import mysql from 'mysql2/promise';
 import { Member } from './types';
 import { getRandomInt, dbLogger } from './util';
 
+/**
+ * This module is for bot with bolt
+ */
+
+/**
+ * Create database connection pool.
+ */
 const pool = mysql.createPool({
   connectionLimit: 10,
   port: 3306,
@@ -11,6 +18,10 @@ const pool = mysql.createPool({
   database: process.env.MYSQL_DBNAME || '_shiftbot',
 });
 
+/**
+ * Get connection object from connection pool.
+ * @returns connection(mysql.PoolConnection)
+ */
 async function getConnection(): Promise<mysql.PoolConnection> {
   return await pool.getConnection();
 }
@@ -31,11 +42,11 @@ export async function getGomiWorkers(): Promise<Member[]> {
  * Return `Member` object who has given slackID
  * 
  * @param slackID(string) : Unique slackID
- * @return `Member` object or null in `Promise`
+ * @return row(Member|null) : `Member` object or null in `Promise`
  */
-export async function getMemberBySlackID(slackId: string): Promise<Member | null> {
+export async function getMemberBySlackID(slackID: string): Promise<Member | null> {
   const db = await getConnection();
-  const [rows,]: any[] = await db.query("SELECT * FROM `members` WHERE slackID = ?", [slackId]);
+  const [rows,]: any[] = await db.query("SELECT * FROM `members` WHERE slackID = ?", [slackID]);
   // Maybe cause bug
   for (const row of rows) {
     return row as Member;
@@ -46,7 +57,7 @@ export async function getMemberBySlackID(slackId: string): Promise<Member | null
 /**
  * Update next cleaning role and return `Member` object of next role.
  * 
- * @return Listed `Member` object or null in `Promise`
+ * @return guriToGura(Array<Member>|null) : Listed `Member` object or null in `Promise`
  */
 export async function updateGomiWorkers(): Promise<Member[] | null> {
   const db = await getConnection();
