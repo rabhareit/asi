@@ -13,7 +13,7 @@ export async function chatting(text: string, sender: string): Promise<string> {
   };
   const req: ChaplusRequest = {
     utterance: text,
-    username: `${sender}さん`,
+    username: `<@${sender}>さん`,
     agentState: {
       agentName: "ごみ捨てbot",
       tone: "normal",

@@ -10,12 +10,12 @@ import { getRandomInt, dbLogger } from "../shared/util";
  * Create database connection pool.
  */
 const pool = mysql.createPool({
-  connectionLimit: 10,
+  connectionLimit: 100,
   port: 3306,
   host: process.env.MYSQL_HOST || "127.0.0.1",
   user: process.env.MYSQL_USER || "root",
-  password: process.env.MYSQL_PASSWD || "",
-  database: process.env.MYSQL_DBNAME || "_shiftbot",
+  password: process.env.MYSQL_PASSWD || "root",
+  database: process.env.MYSQL_DBNAME || "asi",
 });
 
 /**
